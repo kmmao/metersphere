@@ -5,7 +5,10 @@
 
         <!--操作按钮-->
         <div class="ms-opt-btn">
-          <el-button id="inputDelay" type="primary" size="small" v-prevent-re-click @click="editScenario" title="ctrl + s">
+          <el-link type="primary" style="margin-right: 20px" @click="openHis" v-if="path === '/api/automation/update'">{{$t('operating_log.change_history')}}</el-link>
+
+          <el-button id="inputDelay" type="primary" size="small" v-prevent-re-click @click="editScenario"
+                     title="ctrl + s">
             {{ $t('commons.save') }}
           </el-button>
         </div>
@@ -85,6 +88,11 @@
                           :rows="2" size="small"/>
               </el-form-item>
             </el-col>
+            <el-col :span="7" v-if="customNum">
+              <el-form-item label="ID" prop="customNum">
+                <el-input v-model="currentScenario.customNum" size="small"></el-input>
+              </el-form-item>
+            </el-col>
           </el-row>
 
         </el-form>
@@ -102,7 +110,7 @@
                 <el-col :span="6" class="ms-col-one ms-font">
                   <el-tooltip placement="top" effect="light">
                     <template v-slot:content>
-                      <div>{{ currentScenario.name }}</div>
+                      <div>{{ currentScenario.name === undefined || '' ? $t('api_test.scenario.name') : currentScenario.name }}</div>
                     </template>
                     <span class="scenario-name">
                         {{ currentScenario.name === undefined || '' ? $t('api_test.scenario.name') : currentScenario.name }}
@@ -113,20 +121,25 @@
                   {{$t('api_test.automation.step_total')}}：{{scenarioDefinition.length}}
                 </el-col>
                 <el-col :span="3" class="ms-col-one ms-font">
-                  <el-link class="head" @click="showScenarioParameters">{{$t('api_test.automation.scenario_total')}}</el-link>
+                  <el-link class="head" @click="showScenarioParameters">{{ $t('api_test.automation.scenario_total') }}
+                  </el-link>
                   ：{{ getVariableSize() }}
                 </el-col>
                 <el-col :span="3" class="ms-col-one ms-font">
                   <el-checkbox v-model="enableCookieShare">共享cookie</el-checkbox>
                 </el-col>
                 <el-col :span="5">
-                  <env-popover :disabled="scenarioDefinition.length < 1" :env-map="projectEnvMap" :project-ids="projectIds" @setProjectEnvMap="setProjectEnvMap"
-                               :isReadOnly="scenarioDefinition.length < 1" @showPopover="showPopover" :project-list="projectList" ref="envPopover"/>
+                  <env-popover :disabled="scenarioDefinition.length < 1" :env-map="projectEnvMap"
+                               :project-ids="projectIds" @setProjectEnvMap="setProjectEnvMap" :result="envResult"
+                               :isReadOnly="scenarioDefinition.length < 1" @showPopover="showPopover"
+                               :project-list="projectList" ref="envPopover"/>
                 </el-col>
                 <el-col :span="4">
-                  <el-button :disabled="scenarioDefinition.length < 1" size="mini" type="primary" v-prevent-re-click @click="runDebug">{{$t('api_test.request.debug')}}</el-button>
+                  <el-button :disabled="scenarioDefinition.length < 1" size="mini" type="primary" v-prevent-re-click
+                             @click="runDebug">{{ $t('api_test.request.debug') }}
+                  </el-button>
                   <el-tooltip class="item" effect="dark" :content="$t('commons.refresh')" placement="right-start">
-                    <el-button :disabled="scenarioDefinition.length < 1" size="mini"  icon ="el-icon-refresh" v-prevent-re-click @click="getApiScenario"></el-button>
+                    <el-button :disabled="scenarioDefinition.length < 1" size="mini" icon="el-icon-refresh" v-prevent-re-click @click="getApiScenario"></el-button>
                   </el-tooltip>
                   <font-awesome-icon class="alt-ico" :icon="['fa', 'expand-alt']" size="lg" @click="fullScreen"/>
                 </el-col>
@@ -134,16 +147,22 @@
             </div>
             <!-- 场景步骤内容 -->
             <div>
+              <el-button class="el-icon-files ms-open-btn ms-open-btn-left" size="mini" v-prevent-re-click @click="openExpansion">
+                {{$t('api_test.automation.open_expansion')}}
+              </el-button>
+              <el-button class=" el-icon-notebook-1 ms-open-btn" size="mini" @click="closeExpansion">
+                {{$t('api_test.automation.close_expansion')}}
+              </el-button>
               <el-tree node-key="resourceId" :props="props" :data="scenarioDefinition" class="ms-tree"
                        :default-expanded-keys="expandedNode"
                        :expand-on-click-node="false"
                        highlight-current
                        @node-expand="nodeExpand"
                        @node-collapse="nodeCollapse"
-                       :allow-drop="allowDrop" @node-drag-end="allowDrag" @node-click="nodeClick" v-if="!loading" draggable>
+                       :allow-drop="allowDrop" @node-drag-end="allowDrag" @node-click="nodeClick" v-if="!loading" draggable ref="stepTree">
                     <span class="custom-tree-node father" slot-scope="{ node, data}" style="width: 96%">
                       <!-- 步骤组件-->
-                       <ms-component-config :type="data.type" :scenario="data" :response="response" :currentScenario="currentScenario"
+                       <ms-component-config :type="data.type" :scenario="data" :response="response" :currentScenario="currentScenario" :expandedNode="expandedNode"
                                             :currentEnvironmentId="currentEnvironmentId" :node="node" :project-list="projectList" :env-map="projectEnvMap"
                                             @remove="remove" @copyRow="copyRow" @suggestClick="suggestClick" @refReload="refReload" @openScenario="openScenario"/>
                     </span>
@@ -203,15 +222,17 @@
       <api-import v-if="type!=='detail'" ref="apiImport" :saved="false" @refresh="apiImport"/>
 
       <!--步骤最大化-->
-      <ms-drawer :visible="drawer" :size="100" @close="close" direction="right" :show-full-screen="false" :is-show-close="false" style="overflow: hidden">
+      <ms-drawer :visible="drawer" :size="100" @close="close" direction="default" :show-full-screen="false" :is-show-close="false" style="overflow: hidden">
         <template v-slot:header>
           <scenario-header :currentScenario="currentScenario" :projectEnvMap="projectEnvMap" :projectIds.sync="projectIds" :projectList="projectList" :scenarioDefinition="scenarioDefinition" :enableCookieShare="enableCookieShare"
-                           :isFullUrl.sync="isFullUrl" @closePage="close" @unFullScreen="unFullScreen" @showAllBtn="showAllBtn" @runDebug="runDebug" @setProjectEnvMap="setProjectEnvMap" @showScenarioParameters="showScenarioParameters" @setCookieShare="setCookieShare" ref="maximizeHeader"/>
+                           :isFullUrl.sync="isFullUrl" @closePage="close" @unFullScreen="unFullScreen" @showAllBtn="showAllBtn" @runDebug="runDebug" @setProjectEnvMap="setProjectEnvMap" @showScenarioParameters="showScenarioParameters" @setCookieShare="setCookieShare"
+                           ref="maximizeHeader"/>
         </template>
 
         <maximize-scenario :scenario-definition="scenarioDefinition" :envMap="projectEnvMap" :moduleOptions="moduleOptions"
                            :currentScenario="currentScenario" :type="type" ref="maximizeScenario" @openScenario="openScenario"/>
       </ms-drawer>
+      <ms-change-history ref="changeHistory"/>
 
     </div>
   </el-card>
@@ -226,13 +247,14 @@
     Extract,
     IfController,
     JSR223Processor,
-    LoopController
+    LoopController,
+    TransactionController
   } from "../../definition/model/ApiTestModel";
   import {parseEnvironment} from "../../definition/model/EnvironmentModel";
   import {ELEMENT_TYPE, ELEMENTS} from "./Setting";
   import MsApiCustomize from "./ApiCustomize";
   import {getUUID, objToStrMap, strMapToObj, handleCtrlSEvent} from "@/common/js/utils";
-  import ApiEnvironmentConfig from "../../definition/components/environment/ApiEnvironmentConfig";
+  import ApiEnvironmentConfig from "@/business/components/api/test/components/ApiEnvironmentConfig";
   import MsInputTag from "./MsInputTag";
   import MsRun from "./DebugRun";
   import MsApiReportDetail from "../report/ApiReportDetail";
@@ -248,6 +270,8 @@
   import ScenarioHeader from "./maximize/ScenarioHeader";
   import MsDrawer from "../../../common/components/MsDrawer";
   import MsSelectTree from "../../../common/select-tree/SelectTree";
+  import {saveScenario} from "@/business/components/api/automation/api-automation";
+  import MsChangeHistory from "../../../history/ChangeHistory";
 
   let jsonPath = require('jsonpath');
   export default {
@@ -255,7 +279,11 @@
     props: {
       moduleOptions: Array,
       currentScenario: {},
-      type: String
+      type: String,
+      customNum: {
+        type: Boolean,
+        default: false
+      }
     },
     components: {
       MsVariableList,
@@ -271,7 +299,8 @@
       MaximizeScenario,
       ScenarioHeader,
       MsDrawer,
-      MsSelectTree
+      MsSelectTree,
+      MsChangeHistory
     },
     data() {
       return {
@@ -292,6 +321,10 @@
           apiScenarioModuleId: [{required: true, message: this.$t('test_track.case.input_module'), trigger: 'change'}],
           status: [{required: true, message: this.$t('commons.please_select'), trigger: 'change'}],
           principal: [{required: true, message: this.$t('api_test.definition.request.responsible'), trigger: 'change'}],
+          customNum: [
+            {required: true, message: "ID必填", trigger: 'blur'},
+            {max: 50, message: this.$t('test_track.length_less_than') + '50', trigger: 'blur'}
+          ],
         },
         environments: [],
         currentEnvironmentId: "",
@@ -325,7 +358,11 @@
         projectList: [],
         debugResult: new Map,
         drawer: false,
-        isFullUrl: true
+        isFullUrl: true,
+        expandedStatus: false,
+        envResult: {
+          loading: false
+        }
       }
     },
     created() {
@@ -403,6 +440,16 @@
             }
           },
           {
+            title: this.$t('api_test.automation.transcation_controller'),
+            show: this.showButton("TransactionController"),
+            titleColor: "#6D317C",
+            titleBgColor: "#F4F4F5",
+            icon: "alt_route",
+            click: () => {
+              this.addComponent('TransactionController')
+            }
+          },
+          {
             title: this.$t('api_test.automation.wait_controller'),
             show: this.showButton("ConstantTimer"),
             titleColor: "#67C23A",
@@ -458,6 +505,9 @@
       },
     },
     methods: {
+      openHis() {
+        this.$refs.changeHistory.open(this.currentScenario.id);
+      },
       setModule(id, data) {
         this.currentScenario.apiScenarioModuleId = id;
         this.currentScenario.modulePath = data.path;
@@ -520,31 +570,31 @@
       addComponent(type) {
         switch (type) {
           case ELEMENT_TYPE.IfController:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new IfController()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new IfController()) :
               this.scenarioDefinition.push(new IfController());
             break;
           case ELEMENT_TYPE.ConstantTimer:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new ConstantTimer()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new ConstantTimer()) :
               this.scenarioDefinition.push(new ConstantTimer());
             break;
           case ELEMENT_TYPE.JSR223Processor:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor()) :
               this.scenarioDefinition.push(new JSR223Processor());
             break;
           case ELEMENT_TYPE.JSR223PreProcessor:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor({type: "JSR223PreProcessor"})) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor({type: "JSR223PreProcessor"})) :
               this.scenarioDefinition.push(new JSR223Processor({type: "JSR223PreProcessor"}));
             break;
           case ELEMENT_TYPE.JSR223PostProcessor:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor({type: "JSR223PostProcessor"})) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new JSR223Processor({type: "JSR223PostProcessor"})) :
               this.scenarioDefinition.push(new JSR223Processor({type: "JSR223PostProcessor"}));
             break;
           case ELEMENT_TYPE.Assertions:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new Assertions()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new Assertions()) :
               this.scenarioDefinition.push(new Assertions());
             break;
           case ELEMENT_TYPE.Extract:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new Extract()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new Extract()) :
               this.scenarioDefinition.push(new Extract());
             break;
           case ELEMENT_TYPE.CustomizeReq:
@@ -552,8 +602,12 @@
             this.customizeVisible = true;
             break;
           case  ELEMENT_TYPE.LoopController:
-            this.selectedTreeNode != undefined ? this.selectedTreeNode.hashTree.push(new LoopController()) :
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new LoopController()) :
               this.scenarioDefinition.push(new LoopController());
+            break;
+          case ELEMENT_TYPE.TransactionController:
+            this.selectedTreeNode !== undefined ? this.selectedTreeNode.hashTree.push(new TransactionController()) :
+              this.scenarioDefinition.push(new TransactionController());
             break;
           case ELEMENT_TYPE.scenario:
             this.isBtnHide = true;
@@ -597,6 +651,9 @@
       recursiveSorting(arr, scenarioProjectId) {
         for (let i in arr) {
           arr[i].index = Number(i) + 1;
+          if (!arr[i].resourceId) {
+            arr[i].resourceId = getUUID();
+          }
           if (arr[i].type === ELEMENT_TYPE.LoopController && arr[i].loopType === "LOOP_COUNT" && arr[i].hashTree && arr[i].hashTree.length > 1) {
             arr[i].countController.proceed = true;
           }
@@ -623,6 +680,9 @@
         for (let i in this.scenarioDefinition) {
           // 排序
           this.scenarioDefinition[i].index = Number(i) + 1;
+          if (!this.scenarioDefinition[i].resourceId) {
+            this.scenarioDefinition[i].resourceId = getUUID();
+          }
           // 设置循环控制
           if (this.scenarioDefinition[i].type === ELEMENT_TYPE.LoopController && this.scenarioDefinition[i].hashTree
             && this.scenarioDefinition[i].hashTree.length > 1) {
@@ -658,7 +718,6 @@
         this.customizeRequest = {};
         this.sort();
         this.reload();
-        // this.initProjectIds();
       },
       addScenario(arr) {
         if (arr && arr.length > 0) {
@@ -681,7 +740,6 @@
         this.isBtnHide = false;
         this.sort();
         this.reload();
-        // this.initProjectIds();
       },
       setApiParameter(item, refType, referenced) {
         let request = {};
@@ -723,7 +781,6 @@
         this.isBtnHide = false;
         this.sort();
         this.reload();
-        // this.initProjectIds();
       },
       getMaintainerOptions() {
         let workspaceId = localStorage.getItem(WORKSPACE_ID);
@@ -750,7 +807,6 @@
               hashTree.splice(index, 1);
               this.sort();
               this.reload();
-              // this.initProjectIds();
             }
           }
         });
@@ -778,9 +834,6 @@
         this.$nextTick(() => {
           this.loading = false
         });
-        // let definition = JSON.parse(JSON.stringify(this.currentScenario));
-        // definition.hashTree = this.scenarioDefinition;
-        // this.getEnv(JSON.stringify(definition));
       },
       runDebug() {
         /*触发执行操作*/
@@ -795,20 +848,22 @@
                 if (!sign) {
                   return;
                 }
-                this.editScenario().then(() => {
-                  this.debugData = {
-                    id: this.currentScenario.id,
-                    name: this.currentScenario.name,
-                    type: "scenario",
-                    variables: this.currentScenario.variables,
-                    referenced: 'Created',
-                    enableCookieShare: this.enableCookieShare,
-                    headers: this.currentScenario.headers,
-                    environmentMap: this.projectEnvMap,
-                    hashTree: this.scenarioDefinition
-                  };
-                  this.reportId = getUUID().substring(0, 8);
-                })
+                //调试时不再保存
+                this.debugData = {
+                  id: this.currentScenario.id,
+                  name: this.currentScenario.name,
+                  type: "scenario",
+                  variables: this.currentScenario.variables,
+                  referenced: 'Created',
+                  enableCookieShare: this.enableCookieShare,
+                  headers: this.currentScenario.headers,
+                  environmentMap: this.projectEnvMap,
+                  hashTree: this.scenarioDefinition
+                };
+                this.reportId = getUUID().substring(0, 8);
+                // this.editScenario().then(() => {
+                //
+                // })
               })
 
             })
@@ -871,99 +926,26 @@
           this.reload();
         }
       },
-      nodeExpand(data) {
-        if (data.resourceId) {
+      nodeExpand(data, node) {
+        if (data && data.resourceId && this.expandedNode.indexOf(data.resourceId) === -1) {
           this.expandedNode.push(data.resourceId);
         }
       },
-      nodeCollapse(data) {
-        if (data.resourceId) {
+      nodeCollapse(data, node) {
+        if (data && data.resourceId) {
           this.expandedNode.splice(this.expandedNode.indexOf(data.resourceId), 1);
         }
       },
-      setFiles(item, bodyUploadFiles, obj) {
-        if (item.body) {
-          if (item.body.kvs) {
-            item.body.kvs.forEach(param => {
-              if (param.files) {
-                param.files.forEach(item => {
-                  if (item.file) {
-                    if (!item.id) {
-                      let fileId = getUUID().substring(0, 12);
-                      item.name = item.file.name;
-                      item.id = fileId;
-                    }
-                    obj.bodyUploadIds.push(item.id);
-                    bodyUploadFiles.push(item.file);
-                  }
-                });
-              }
-            });
-          }
-          if (item.body.binary) {
-            item.body.binary.forEach(param => {
-              if (param.files) {
-                param.files.forEach(item => {
-                  if (item.file) {
-                    if (!item.id) {
-                      let fileId = getUUID().substring(0, 12);
-                      item.name = item.file.name;
-                      item.id = fileId;
-                    }
-                    obj.bodyUploadIds.push(item.id);
-                    bodyUploadFiles.push(item.file);
-                  }
-                });
-              }
-            });
-          }
-        }
-      },
-      recursiveFile(arr, bodyUploadFiles, obj) {
-        arr.forEach(item => {
-          this.setFiles(item, bodyUploadFiles, obj);
-          if (item.hashTree != undefined && item.hashTree.length > 0) {
-            this.recursiveFile(item.hashTree, bodyUploadFiles, obj);
-          }
-        });
-      },
-      getBodyUploadFiles(obj) {
-        let bodyUploadFiles = [];
-        obj.bodyUploadIds = [];
-        this.scenarioDefinition.forEach(item => {
-          this.setFiles(item, bodyUploadFiles, obj);
-          if (item.hashTree != undefined && item.hashTree.length > 0) {
-            this.recursiveFile(item.hashTree, bodyUploadFiles, obj);
-          }
-        })
-        // 场景变量csv 文件
-        if (this.currentScenario.variables) {
-          this.currentScenario.variables.forEach(param => {
-            if (param.type === 'CSV' && param.files) {
-              param.files.forEach(item => {
-                if (item.file) {
-                  if (!item.id) {
-                    let fileId = getUUID().substring(0, 12);
-                    item.name = item.file.name;
-                    item.id = fileId;
-                  }
-                  obj.bodyUploadIds.push(item.id);
-                  bodyUploadFiles.push(item.file);
-                }
-              })
-            }
-          })
-        }
-        return bodyUploadFiles;
-      },
       editScenario() {
+        if (!document.getElementById("inputDelay")) {
+          return;
+        }
         return new Promise((resolve) => {
           document.getElementById("inputDelay").focus();  //  保存前在input框自动失焦，以免保存失败
           this.$refs['currentScenario'].validate((valid) => {
             if (valid) {
               this.setParameter();
-              let bodyFiles = this.getBodyUploadFiles(this.currentScenario);
-              this.$fileUpload(this.path, null, bodyFiles, this.currentScenario, response => {
+              saveScenario(this.path, this.currentScenario, this.scenarioDefinition, (response) => {
                 this.$success(this.$t('commons.save_success'));
                 this.path = "/api/automation/update";
                 if (response.data) {
@@ -974,7 +956,7 @@
                 }
                 this.$emit('refresh', this.currentScenario);
                 resolve();
-              })
+              });
             }
           })
         });
@@ -984,6 +966,7 @@
           this.$post("/api/automation/getApiScenarioEnv", {definition: definition}, res => {
             if (res.data) {
               this.projectIds = new Set(res.data.projectIds);
+              this.projectIds.add(this.projectId);
               this.isFullUrl = res.data.fullUrl;
             }
             resolve();
@@ -992,7 +975,7 @@
       },
       getApiScenario() {
         this.loading = true;
-        if (this.currentScenario.tags != undefined && !(this.currentScenario.tags instanceof Array)) {
+        if (this.currentScenario.tags != undefined && this.currentScenario.tags && !(this.currentScenario.tags instanceof Array)) {
           this.currentScenario.tags = JSON.parse(this.currentScenario.tags);
         }
         if (!this.currentScenario.variables) {
@@ -1036,6 +1019,13 @@
                     this.currentScenario.headers = obj.headers;
                   }
                   this.enableCookieShare = obj.enableCookieShare;
+                  if (obj.hashTree) {
+                    obj.hashTree.forEach(item => {
+                      if (!item.hashTree) {
+                        item.hashTree = [];
+                      }
+                    });
+                  }
                   this.scenarioDefinition = obj.hashTree;
                 }
               }
@@ -1045,8 +1035,6 @@
             }
             this.loading = false;
             this.sort();
-            // this.initProjectIds();
-            // this.getEnvironments();
           })
         }
       },
@@ -1115,18 +1103,7 @@
         })
       },
       refReload() {
-        // this.initProjectIds();
         this.reload();
-      },
-      initProjectIds() {
-        // // 加载环境配置
-        // this.$nextTick(() => {
-        //   this.projectIds.clear();
-        //   this.scenarioDefinition.forEach(data => {
-        //     let arr = jsonPath.query(data, "$..projectId");
-        //     arr.forEach(a => this.projectIds.add(a));
-        //   })
-        // })
       },
       detailRefresh(result) {
         // 把执行结果分发给各个请求
@@ -1146,9 +1123,49 @@
       showPopover() {
         let definition = JSON.parse(JSON.stringify(this.currentScenario));
         definition.hashTree = this.scenarioDefinition;
+        this.envResult.loading = true;
         this.getEnv(JSON.stringify(definition)).then(() => {
           this.$refs.envPopover.openEnvSelect();
+          this.envResult.loading = false;
         })
+      },
+      shrinkTreeNode() {
+        //改变每个节点的状态
+        for (let i in this.scenarioDefinition) {
+          if (this.scenarioDefinition[i]) {
+            if (this.expandedStatus && this.expandedNode.indexOf(this.scenarioDefinition[i].resourceId) === -1) {
+              this.expandedNode.push(this.scenarioDefinition[i].resourceId);
+            }
+            this.scenarioDefinition[i].active = this.expandedStatus;
+            if (this.scenarioDefinition[i].hashTree && this.scenarioDefinition[i].hashTree.length > 0) {
+              this.changeNodeStatus(this.scenarioDefinition[i].hashTree);
+            }
+          }
+        }
+      },
+      changeNodeStatus(nodes) {
+        for (let i in nodes) {
+          if (nodes[i]) {
+            if (this.expandedStatus) {
+              this.expandedNode.push(nodes[i].resourceId);
+            }
+            nodes[i].active = this.expandedStatus;
+            if (nodes[i].hashTree != undefined && nodes[i].hashTree.length > 0) {
+              this.changeNodeStatus(nodes[i].hashTree);
+            }
+          }
+        }
+      },
+      openExpansion() {
+        this.expandedNode = [];
+        this.expandedStatus = true;
+        this.shrinkTreeNode();
+      },
+      closeExpansion() {
+        this.expandedStatus = false;
+        this.expandedNode = [];
+        this.shrinkTreeNode();
+        this.reload();
       }
     }
   }
@@ -1308,5 +1325,16 @@
     vertical-align: middle;
     white-space: nowrap;
     width: 200px;
+  }
+
+  .ms-open-btn {
+    margin: 5px 5px 0px;
+    font-size: 10px;
+    background-color: #F2F9EE;
+    color: #67C23A;
+  }
+
+  .ms-open-btn-left {
+    margin-left: 30px;
   }
 </style>

@@ -8,8 +8,13 @@
       :progress-enable="false"
       :tags="tags"
       :height="height"
+      :tag-edit-check="tagEditCheck"
+      :priority-disable-check="priorityDisableCheck"
       :distinct-tags="distinctTags"
+      :default-mold="defaultMode"
       @afterMount="$emit('afterMount')"
+      @moldChange="handleMoldChange"
+      :disabled="disabled"
       @save="save"
     />
   </div>
@@ -23,6 +28,7 @@ export default {
   name: "MsModuleMinder",
   components: {MsFullScreenButton},
   props: {
+    minderKey: String,
     treeNodes: {
       type: Array,
       default() {
@@ -55,7 +61,11 @@ export default {
     },
     selectNode: {
       type: Object,
-    }
+    },
+    tagDisableCheck: Function,
+    tagEditCheck: Function,
+    priorityDisableCheck: Function,
+    disabled: Boolean
   },
   data() {
     return {
@@ -75,11 +85,21 @@ export default {
       },
       isActive: true,
       isFullScreen: false,
-      height: ''
+      height: '',
+      defaultMode: 3
     }
   },
   created() {
     this.height = document.body.clientHeight - 340;
+  },
+  mounted() {
+    this.defaultMode = 3;
+    if (this.minderKey) {
+      let model = localStorage.getItem(this.minderKey + 'minderModel');
+      if (model) {
+        this.defaultMode = Number.parseInt(model);
+      }
+    }
   },
   watch: {
     dataMap() {
@@ -94,6 +114,12 @@ export default {
     }
   },
   methods: {
+    handleMoldChange(index) {
+      if (this.minderKey) {
+        localStorage.setItem(this.minderKey + 'minderModel', index);
+      }
+      this.defaultMode = index;
+    },
     save(data) {
       this.$emit('save', data)
     },
@@ -213,5 +239,9 @@ export default {
 
 .full-screen .fulls-screen-btn {
   right: 30px;
+}
+
+/deep/ *[disabled] {
+  opacity: 0.7 !important;
 }
 </style>

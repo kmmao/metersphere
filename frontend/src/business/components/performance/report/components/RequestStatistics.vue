@@ -6,19 +6,20 @@
       border
       style="width: 100%"
     >
-      <el-table-column label="Requests" fixed width="450" align="center">
+      <el-table-column label="Requests" min-width="150" align="center">
         <el-table-column
           prop="label"
           label="Label"
-          width="450">
+          min-width="150">
           <template v-slot:header="{column}">
             <span>Label</span>
-            <i class="el-icon-search" style="margin-left: 8px;cursor: pointer;font-weight: bold;" @click="click(column)"></i>
+            <i class="el-icon-search" style="margin-left: 8px;cursor: pointer;font-weight: bold;"
+               @click="click(column)"></i>
             <el-input v-model="searchLabel"
                       placeholder="请输入 Label 搜索"
                       size="mini"
                       class="search_input"
-                      style="width: 250px; margin-left: 5px"
+                      style="width: 100px; margin-left: 5px"
                       v-if="column.showSearch"
                       clearable
                       @clear="filterLabel"
@@ -39,6 +40,7 @@
           prop="fail"
           label="FAIL"
           align="center"
+          min-width="60"
         />
 
         <el-table-column
@@ -51,39 +53,46 @@
       <el-table-column label="Response Times(ms)" align="center">
         <el-table-column
           prop="average"
-          label="Average"
+          label="Avg"
+          min-width="60"
         />
         <el-table-column
           prop="min"
           label="Min"
+          min-width="60"
         />
         <el-table-column
           prop="max"
           label="Max"
+          min-width="60"
         />
         <el-table-column
           prop="median"
-          label="Median"
+          label="Med"
+          min-width="60"
         />
         <el-table-column
           prop="tp90"
-          label="90% line"
+          label="90%"
+          min-width="60"
         />
         <el-table-column
           prop="tp95"
-          label="95% line"
+          label="95%"
+          min-width="60"
         />
         <el-table-column
           prop="tp99"
-          label="99% line"
+          label="99%"
+          min-width="60"
         />
       </el-table-column>
 
       <el-table-column label="Throughput">
         <el-table-column
           prop="transactions"
-          label="Transactions/s"
-          width="150"
+          label="Trans/s"
+          width="100"
         />
       </el-table-column>
 
@@ -92,13 +101,13 @@
           prop="received"
           label="Received"
           align="center"
-          width="150"
+          width="100"
         />
         <el-table-column
           prop="sent"
           label="Sent"
           align="center"
-          width="150"
+          width="100"
         />
       </el-table-column>
 

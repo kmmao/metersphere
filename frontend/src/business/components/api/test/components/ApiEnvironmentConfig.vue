@@ -1,12 +1,12 @@
 <template>
   <el-dialog :close-on-click-modal="false" :title="$t('api_test.environment.environment_config')"
-             :visible.sync="visible" class="environment-dialog" width="60%"
-             @close="close" append-to-body ref="environmentConfig">
+             :visible.sync="visible" class="environment-dialog" width="80%"
+             @close="close" append-to-body destroy-on-close ref="environmentConfig">
     <el-container v-loading="result.loading">
       <ms-aside-item :enable-aside-hidden="false" :title="$t('api_test.environment.environment_list')"
                      :data="environments" :item-operators="environmentOperators" :add-fuc="addEnvironment"
                      :delete-fuc="deleteEnvironment" @itemSelected="environmentSelected" ref="environmentItems"/>
-      <environment-edit :environment="currentEnvironment" ref="environmentEdit" @close="close"/>
+      <environment-edit :project-id="projectId" :environment="currentEnvironment" ref="environmentEdit" @close="close"/>
     </el-container>
   </el-dialog>
 </template>
@@ -70,6 +70,8 @@
         }
       },
       copyEnvironment(environment) {
+        //点击复制的时候先选择改行，否则会出现解析错误
+        this.environmentSelected(environment);
         this.currentEnvironment = environment;
         if (!environment.id) {
           this.$warning(this.$t('commons.please_save'));

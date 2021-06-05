@@ -12,14 +12,20 @@ import java.util.List;
 
 public interface ExtApiScenarioMapper {
     List<ApiScenarioDTO> list(@Param("request") ApiScenarioRequest request);
+
+    int listModule(@Param("request") ApiScenarioRequest request);
+
     List<ApiScenarioDTO> listReview(@Param("request") ApiScenarioRequest request);
     List<ApiScenarioWithBLOBs> selectByTagId(@Param("id") String id);
 
     List<ApiScenarioWithBLOBs> selectIds(@Param("ids") List<String> ids);
 
+    List<ApiScenarioWithBLOBs> selectByIds(@Param("ids") String ids,@Param("oderId") String oderId);
+
     List<ApiScenario> selectReference(@Param("request") ApiScenarioRequest request);
 
     int removeToGc(@Param("ids") List<String> ids);
+
 
     int removeToGcByExample(ApiScenarioExample example);
 
@@ -38,4 +44,8 @@ public interface ExtApiScenarioMapper {
     ApiScenario getNextNum(@Param("projectId") String projectId);
 
     List<String> selectIdsByQuery(@Param("request") ApiScenarioRequest request);
+
+    void updateCustomNumByProjectId(@Param("projectId") String projectId);
+
+    List<ApiScenarioWithBLOBs> listWithIds(@Param("ids") List<String> ids);
 }

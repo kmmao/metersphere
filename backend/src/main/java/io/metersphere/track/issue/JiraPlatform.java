@@ -5,12 +5,16 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import io.metersphere.base.domain.*;
 import io.metersphere.commons.constants.IssuesManagePlatform;
+import io.metersphere.commons.constants.IssuesStatus;
 import io.metersphere.commons.exception.MSException;
 import io.metersphere.commons.utils.EncryptUtils;
 import io.metersphere.commons.utils.LogUtil;
+import io.metersphere.dto.CustomFieldItemDTO;
 import io.metersphere.track.dto.DemandDTO;
-import io.metersphere.track.issue.domain.PlatformUser;
+import io.metersphere.track.issue.client.JiraClient;
+import io.metersphere.track.issue.domain.*;
 import io.metersphere.track.request.testcase.IssuesRequest;
+import io.metersphere.track.request.testcase.IssuesUpdateRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.commonmark.node.Node;
 import org.commonmark.parser.Parser;
@@ -28,41 +32,42 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class JiraPlatform extends AbstractIssuePlatform {
 
+    protected String key = IssuesManagePlatform.Jira.toString();
 
     public JiraPlatform(IssuesRequest issuesRequest) {
         super(issuesRequest);
     }
 
-    @Override
-    public List<Issues> getIssue() {
-        List<Issues> list = new ArrayList<>();
-
+    public JiraConfig getConfig() {
         String config = getPlatformConfig(IssuesManagePlatform.Jira.toString());
-        JSONObject object = JSON.parseObject(config);
-
-        if (object == null) {
-            MSException.throwException("tapd config is null");
+        if (StringUtils.isNotBlank(config)) {
+            return JSONObject.parseObject(config, JiraConfig.class);
+        } else {
+            return null;
         }
+    }
 
-        String account = object.getString("account");
-        String password = object.getString("password");
-        String url = object.getString("url");
-        HttpHeaders headers = auth(account, password);
+    @Override
+    public List<IssuesDao> getIssue(IssuesRequest issuesRequest) {
+        List<IssuesDao> list = new ArrayList<>();
 
-        TestCaseIssuesExample example = new TestCaseIssuesExample();
-        example.createCriteria().andTestCaseIdEqualTo(testCaseId);
-
-        List<Issues> issues = extIssuesMapper.getIssues(testCaseId, IssuesManagePlatform.Jira.toString());
-
-        List<String> issuesIds = issues.stream().map(Issues::getId).collect(Collectors.toList());
-        issuesIds.forEach(issuesId -> {
-            Issues dto = getJiraIssues(headers, url, issuesId);
-            if (StringUtils.isBlank(dto.getId())) {
+        issuesRequest.setPlatform(IssuesManagePlatform.Jira.toString());
+        List<IssuesDao> issues;
+        if (StringUtils.isNotBlank(issuesRequest.getProjectId())) {
+            issues = extIssuesMapper.getIssuesByProjectId(issuesRequest);
+        } else {
+            issues = extIssuesMapper.getIssuesByCaseId(issuesRequest);
+        }
+        JiraConfig config = getConfig();
+        JiraClient.setConfig(config);
+        issues.forEach(item -> {
+            String issuesId = item.getId();
+            parseIssue(item, JiraClient.getIssues(issuesId));
+            if (StringUtils.isBlank(item.getId())) {
                 // 缺陷不存在，解除用例和缺陷的关联
                 TestCaseIssuesExample issuesExample = new TestCaseIssuesExample();
                 issuesExample.createCriteria()
@@ -72,12 +77,73 @@ public class JiraPlatform extends AbstractIssuePlatform {
                 issuesMapper.deleteByPrimaryKey(issuesId);
             } else {
                 // 缺陷状态为 完成，则不显示
-                if (!StringUtils.equals("done", dto.getStatus())) {
-                    list.add(dto);
+                if (!StringUtils.equals("done", item.getStatus())) {
+                    list.add(item);
                 }
             }
         });
         return list;
+    }
+
+    public void parseIssue(IssuesDao item, JiraIssue jiraIssue) {
+        String lastmodify = "";
+        String status = "";
+        JSONObject fields = jiraIssue.getFields();
+        JSONObject statusObj = (JSONObject) fields.get("status");
+        JSONObject assignee = (JSONObject) fields.get("assignee");
+        if (statusObj != null) {
+            JSONObject statusCategory = (JSONObject) statusObj.get("statusCategory");
+            status = statusCategory.getString("key");
+        }
+
+        String description = fields.getString("description");
+
+        Parser parser = Parser.builder().build();
+        Node document = parser.parse(description);
+        HtmlRenderer renderer = HtmlRenderer.builder().build();
+        description = renderer.render(document);
+
+        if (assignee != null) {
+            lastmodify = assignee.getString("displayName");
+        }
+        item.setId(jiraIssue.getKey());
+        item.setTitle(fields.getString("summary"));
+        item.setCreateTime(fields.getLong("created"));
+        item.setLastmodify(lastmodify);
+        item.setDescription(description);
+        item.setStatus(status);
+        item.setPlatform(IssuesManagePlatform.Jira.toString());
+    }
+
+    public HttpHeaders getAuthHeader(JSONObject object) {
+        if (object == null) {
+            MSException.throwException("tapd config is null");
+        }
+
+        String account = object.getString("account");
+        String password = object.getString("password");
+        return auth(account, password);
+    }
+
+    @Override
+    public void filter(List<IssuesDao> issues) {
+        String config = getPlatformConfig(IssuesManagePlatform.Jira.toString());
+        JSONObject object = JSON.parseObject(config);
+        HttpHeaders headers = getAuthHeader(object);
+        String url = object.getString("url");
+
+        issues.forEach((issuesDao) -> {
+            IssuesDao dto = getJiraIssues(headers, url, issuesDao.getId());
+            if (StringUtils.isBlank(dto.getId())) {
+                // 标记成删除
+                issuesDao.setStatus(IssuesStatus.DELETE.toString());
+            } else {
+                // 缺陷状态为 完成，则不显示
+                if (!StringUtils.equals("done", dto.getStatus())) {
+                    issuesDao.setStatus(IssuesStatus.RESOLVED.toString());
+                }
+            }
+        });
     }
 
     @Override
@@ -134,32 +200,24 @@ public class JiraPlatform extends AbstractIssuePlatform {
     }
 
     @Override
-    public void addIssue(IssuesRequest issuesRequest) {
-        String config = getPlatformConfig(IssuesManagePlatform.Jira.toString());
-        JSONObject object = JSON.parseObject(config);
+    public void addIssue(IssuesUpdateRequest issuesRequest) {
+        issuesRequest.setPlatform(IssuesManagePlatform.Jira.toString());
 
-        if (object == null) {
+        JiraConfig config = getConfig();
+        if (config == null) {
             MSException.throwException("jira config is null");
         }
-
-        String account = object.getString("account");
-        String password = object.getString("password");
-        String url = object.getString("url");
-        String issuetype = object.getString("issuetype");
-        if (StringUtils.isBlank(issuetype)) {
+        if (StringUtils.isBlank(config.getIssuetype())) {
             MSException.throwException("Jira 问题类型为空");
         }
-        String auth = EncryptUtils.base64Encoding(account + ":" + password);
 
-        String testCaseId = issuesRequest.getTestCaseId();
-        String jiraKey = getProjectId(null);
-
+        String jiraKey = getProjectId(issuesRequest.getProjectId());
 
         if (StringUtils.isBlank(jiraKey)) {
             MSException.throwException("未关联Jira 项目Key");
         }
 
-        String content = issuesRequest.getContent();
+        String content = issuesRequest.getDescription();
 
         Document document = Jsoup.parse(content);
         document.outputSettings(new Document.OutputSettings().prettyPrint(false));
@@ -169,36 +227,55 @@ public class JiraPlatform extends AbstractIssuePlatform {
         String desc = Jsoup.clean(s, "", Whitelist.none(), new Document.OutputSettings().prettyPrint(false));
         desc = desc.replace("&nbsp;", "");
 
-        String json = "{\n" +
-                "    \"fields\":{\n" +
-                "        \"project\":{\n" +
-                "            \"key\":\"" + jiraKey + "\"\n" +
-                "        },\n" +
-                "        \"summary\":\"" + issuesRequest.getTitle() + "\",\n" +
-                "        \"description\": " + JSON.toJSONString(desc) + ",\n" +
-                "        \"issuetype\":{\n" +
-                "            \"name\":\"" + issuetype + "\"\n" +
-                "        }\n" +
-                "    }\n" +
-                "}";
+        JSONObject addJiraIssueParam = new JSONObject();
+        JSONObject fields = new JSONObject();
+        JSONObject project = new JSONObject();
 
-        String result = addJiraIssue(url, auth, json);
 
-        JSONObject jsonObject = JSON.parseObject(result);
-        String id = jsonObject.getString("key");
+        fields.put("project", project);
+        project.put("key", jiraKey);
 
+        JSONObject issuetype = new JSONObject();
+        issuetype.put("name", config.getIssuetype());
+
+        fields.put("summary", issuesRequest.getTitle());
+        fields.put("description", new JiraIssueDescription(desc));
+        fields.put("issuetype", issuetype);
+        addJiraIssueParam.put("fields", fields);
+
+        List<CustomFieldItemDTO> customFields = getCustomFields(issuesRequest.getCustomFields());
+        JiraClient.setConfig(config);
+//        List<JiraField> jiraFields = JiraClient.getFields();
+//        Map<String, Boolean> isCustomMap = jiraFields.stream().
+//                collect(Collectors.toMap(JiraField::getId, JiraField::isCustom));
+
+        customFields.forEach(item -> {
+            if (StringUtils.isNotBlank(item.getCustomData())) {
+//                if (isCustomMap.get(item.getCustomData())) {
+//                    fields.put(item.getCustomData(), item.getValue());
+//                } else {
+                  // Jira文档说明中自定义字段和系统字段参数格式有区别，实测是一样的
+                    JSONObject param = new JSONObject();
+                    param.put("id", item.getValue());
+                    fields.put(item.getCustomData(), param);
+//                }
+            }
+        });
+        JiraAddIssueResponse result = JiraClient.addIssue(JSONObject.toJSONString(addJiraIssueParam));
+
+        issuesRequest.setId(result.getKey());
         // 用例与第三方缺陷平台中的缺陷关联
-        TestCaseIssues testCaseIssues = new TestCaseIssues();
-        testCaseIssues.setId(UUID.randomUUID().toString());
-        testCaseIssues.setIssuesId(id);
-        testCaseIssues.setTestCaseId(testCaseId);
-        testCaseIssuesMapper.insert(testCaseIssues);
+        handleTestCaseIssues(issuesRequest);
 
         // 插入缺陷表
-        Issues issues = new Issues();
-        issues.setId(id);
-        issues.setPlatform(IssuesManagePlatform.Jira.toString());
-        issuesMapper.insert(issues);
+        insertIssuesWithoutContext(result.getKey(), issuesRequest);
+    }
+
+    @Override
+    public void updateIssue(IssuesUpdateRequest request) {
+        // todo 调用接口
+        request.setDescription(null);
+        handleIssueUpdate(request);
     }
 
     private String addJiraIssue(String url, String auth, String json) {
@@ -258,12 +335,12 @@ public class JiraPlatform extends AbstractIssuePlatform {
         return project.getJiraKey();
     }
 
-    private Issues getJiraIssues(HttpHeaders headers, String url, String issuesId) {
+    public IssuesDao getJiraIssues(HttpHeaders headers, String url, String issuesId) {
         HttpEntity<MultiValueMap> requestEntity = new HttpEntity<>(headers);
         RestTemplate restTemplate = new RestTemplate();
         //post
         ResponseEntity<String> responseEntity;
-        Issues issues = new Issues();
+        IssuesDao issues = new IssuesDao();
         try {
             responseEntity = restTemplate.exchange(url + "/rest/api/2/issue/" + issuesId, HttpMethod.GET, requestEntity, String.class);
             String body = responseEntity.getBody();
@@ -307,7 +384,7 @@ public class JiraPlatform extends AbstractIssuePlatform {
             issues.setPlatform(IssuesManagePlatform.Jira.toString());
         } catch (HttpClientErrorException.NotFound e) {
             LogUtil.error(e.getStackTrace(), e);
-            return new Issues();
+            return new IssuesDao();
         } catch (HttpClientErrorException.Unauthorized e) {
             LogUtil.error(e.getStackTrace(), e);
             MSException.throwException("获取Jira缺陷失败，检查Jira配置信息");

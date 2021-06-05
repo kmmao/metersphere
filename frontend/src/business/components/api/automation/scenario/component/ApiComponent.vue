@@ -23,7 +23,7 @@
 
       <template v-slot:button>
         <el-tooltip :content="$t('api_test.run')" placement="top">
-          <el-button @click="run" icon="el-icon-video-play" style="padding: 5px" class="ms-btn" size="mini" circle/>
+          <el-button :disabled="!request.enable" @click="run" icon="el-icon-video-play" style="padding: 5px" class="ms-btn" size="mini" circle/>
         </el-tooltip>
       </template>
 
@@ -41,7 +41,7 @@
                         :request="request"
                         :showScript="false"
                         ref="esbDefinition"/>
-        <ms-tcp-basis-parameters v-if="(request.protocol==='TCP'|| request.type==='TCPSampler')&&request.esbDataStruct==null "
+        <ms-tcp-basis-parameters v-if="(request.protocol==='TCP'|| request.type==='TCPSampler')&& request.esbDataStruct==null "
                                  :request="request"
                                  :showScript="false"/>
         <ms-sql-basis-parameters v-if="request.protocol==='SQL'|| request.type==='JDBCSampler'"
@@ -58,13 +58,13 @@
           <el-tabs v-model="request.activeName" closable class="ms-tabs">
             <el-tab-pane :label="item.name" :name="item.name" v-for="(item,index) in request.result.scenarios" :key="index">
               <div v-for="(result,i) in item.requestResults" :key="i" style="margin-bottom: 5px">
-                <api-response-component v-if="result.name===request.name" :result="result"/>
+                <api-response-component v-if="result.id===request.id" :result="result"/>
               </div>
             </el-tab-pane>
           </el-tabs>
         </div>
         <div v-else-if="showXpackCompnent&&request.backEsbDataStruct != null">
-          <esb-definition-response v-xpack v-if="showXpackCompnent"  :currentProtocol="request.protocol" :request="request" :is-api-component="false"
+          <esb-definition-response v-xpack v-if="showXpackCompnent" :currentProtocol="request.protocol" :request="request" :is-api-component="false"
                                    :show-options-button="false" :show-header="true" :result="request.requestResult"/>
         </div>
         <div v-else>
@@ -77,7 +77,7 @@
       </template>
     </api-base-component>
     <ms-run :debug="true" :reportId="reportId" :run-data="runData" :env-map="envMap"
-            @runRefresh="runRefresh" ref="runTest"/>
+            @runRefresh="runRefresh" @errorRefresh="errorRefresh" ref="runTest"/>
 
   </div>
 </template>
@@ -118,6 +118,7 @@
       },
       currentEnvironmentId: String,
       projectList: Array,
+      expandedNode: Array,
       envMap: Map
     },
     components: {
@@ -134,6 +135,7 @@
         runData: [],
         isShowInput: false,
         showXpackCompnent: false,
+        environment: {},
       }
     },
     created() {
@@ -144,6 +146,7 @@
       if (!this.request.projectId) {
         this.request.projectId = getCurrentProjectID();
       }
+      this.request.customizeReq = this.isCustomizeReq;
       // 加载引用对象数据
       this.getApiInfo();
       if (this.request.protocol === 'HTTP') {
@@ -162,6 +165,12 @@
       if (requireComponent != null && JSON.stringify(esbDefinition) != '{}' && JSON.stringify(esbDefinitionResponse) != '{}') {
         this.showXpackCompnent = true;
       }
+      this.getEnvironments();
+    },
+    watch: {
+      envMap() {
+        this.getEnvironments();
+      },
     },
     computed: {
       displayColor() {
@@ -207,18 +216,46 @@
       },
       isCustomizeReq() {
         if (this.request.referenced == undefined || this.request.referenced === 'Created') {
-          return true
+          return true;
         }
         return false;
       },
       isDeletedOrRef() {
         if (this.request.referenced != undefined && this.request.referenced === 'Deleted' || this.request.referenced === 'REF') {
-          return true
+          return true;
         }
         return false;
       },
+      projectId() {
+        return this.$store.state.projectId;
+      },
     },
     methods: {
+      initDataSource() {
+        let databaseConfigsOptions = [];
+        if (this.request.protocol === 'SQL' || this.request.type === 'JDBCSampler') {
+          if (this.environment.config) {
+            let config = JSON.parse(this.environment.config);
+            config.databaseConfigs.forEach(item => {
+              databaseConfigsOptions.push(item);
+            });
+          }
+        }
+        if (databaseConfigsOptions.length > 0) {
+          this.request.dataSourceId = databaseConfigsOptions[0].id;
+          this.request.environmentId = this.environment.id;
+        }
+      },
+      getEnvironments() {
+        this.environment = {};
+        let id = this.envMap.get(this.request.projectId);
+        if (id) {
+          this.$get('/api/environment/get/' + id, response => {
+            this.environment = response.data;
+            this.initDataSource();
+          });
+        }
+      },
       remove() {
         this.$emit('remove', this.request, this.node);
       },
@@ -231,8 +268,10 @@
           this.request.url = url;
         } catch (e) {
           if (url && (!url.startsWith("http://") || !url.startsWith("https://"))) {
-            this.request.path = url;
-            this.request.url = undefined;
+            if (!this.isCustomizeReq) {
+              this.request.path = url;
+              this.request.url = undefined;
+            }
           }
         }
       },
@@ -271,6 +310,9 @@
         for (let i in arr) {
           arr[i].disabled = true;
           arr[i].index = Number(i) + 1;
+          if (!arr[i].resourceId) {
+            arr[i].resourceId = getUUID();
+          }
           if (arr[i].hashTree != undefined && arr[i].hashTree.length > 0) {
             this.recursiveSorting(arr[i].hashTree);
           }
@@ -278,6 +320,9 @@
       },
       sort() {
         for (let i in this.request.hashTree) {
+          if (!this.request.hashTree[i].resourceId) {
+            this.request.hashTree[i].resourceId = getUUID();
+          }
           this.request.hashTree[i].disabled = true;
           this.request.hashTree[i].index = Number(i) + 1;
           if (this.request.hashTree[i].hashTree != undefined && this.request.hashTree[i].hashTree.length > 0) {
@@ -290,18 +335,27 @@
         if (this.node) {
           this.node.expanded = this.request.active;
         }
+        if (this.node.expanded && this.expandedNode.indexOf(this.request.resourceId) === -1) {
+          this.expandedNode.push(this.request.resourceId);
+        } else {
+          if (this.expandedNode.indexOf(this.request.resourceId) !== -1) {
+            this.expandedNode.splice(this.expandedNode.indexOf(this.request.resourceId), 1);
+          }
+        }
         this.reload();
       },
       run() {
-        if (this.isApiImport) {
-          if (!this.envMap || this.envMap.size === 0) {
-            this.$warning("请在环境配置中为该步骤所属项目选择运行环境！");
-            return false;
-          } else if (this.envMap && this.envMap.size > 0) {
-            const env = this.envMap.get(this.request.projectId);
-            if (!env) {
+        if (this.isApiImport || this.request.isRefEnvironment) {
+          if (this.request.type && (this.request.type === "HTTPSamplerProxy" || this.request.type === "JDBCSampler" || this.request.type === "TCPSampler")) {
+            if (!this.envMap || this.envMap.size === 0) {
               this.$warning("请在环境配置中为该步骤所属项目选择运行环境！");
               return false;
+            } else if (this.envMap && this.envMap.size > 0) {
+              const env = this.envMap.get(this.request.projectId);
+              if (!env) {
+                this.$warning("请在环境配置中为该步骤所属项目选择运行环境！");
+                return false;
+              }
             }
           }
         }
@@ -320,6 +374,9 @@
         /*触发执行操作*/
         this.reportId = getUUID();
       },
+      errorRefresh() {
+        this.loading = false;
+      },
       runRefresh(data) {
         this.request.requestResult = data;
         this.request.result = undefined;
@@ -333,8 +390,11 @@
         })
       },
       getProjectName(id) {
-        const project = this.projectList.find(p => p.id === id);
-        return project ? project.name : "";
+        if (this.projectId !== id) {
+          const project = this.projectList.find(p => p.id === id);
+          return project ? project.name : "";
+        }
+
       }
     }
   }

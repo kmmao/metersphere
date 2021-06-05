@@ -42,7 +42,7 @@
   import {Environment} from "../../model/EnvironmentModel";
   import MsApiHostTable from "./ApiHostTable";
   import MsDatabaseConfig from "../request/database/DatabaseConfig";
-  import MsEnvironmentHttpConfig from "./EnvironmentHttpConfig";
+  import MsEnvironmentHttpConfig from "../../../test/components/environment/EnvironmentHttpConfig";
   import MsEnvironmentCommonConfig from "./EnvironmentCommonConfig";
   import EnvironmentTcpConfig from "./EnvironmentTcpConfig";
 
@@ -101,7 +101,7 @@
         if (param.id) {
           url = '/api/environment/update';
         }
-        this.result = this.$post(url, param, response => {
+        this.result = this.$fileUpload(url, null, [], param, response => {
           if (!param.id) {
             environment.id = response.data;
           }

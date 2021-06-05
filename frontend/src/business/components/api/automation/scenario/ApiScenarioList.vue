@@ -1,10 +1,8 @@
 <template>
   <div>
-    <el-card class="table-card" v-loading="result.loading">
-      <template v-slot:header>
-        <ms-table-header :condition.sync="condition" @search="selectByParam" title=""
-                         :show-create="false" :tip="$t('commons.search_by_id_name_tag')"/>
-      </template>
+    <el-card class="table-card-nopadding" v-loading="result.loading">
+      <ms-table-header :condition.sync="condition" @search="selectByParam" title=""
+                       :show-create="false" :tip="$t('commons.search_by_id_name_tag')"/>
 
       <el-table ref="scenarioTable" border :data="tableData" class="adjust-table ms-select-all-fixed"
                 @sort-change="sort"
@@ -25,18 +23,30 @@
 
         <el-table-column v-if="!referenced" width="30" min-width="30" :resizable="false" align="center">
           <template v-slot:default="scope">
-            <show-more-btn :is-show="scope.row.showMore" :buttons="trashEnable ? trashButtons: buttons" :size="selectDataCounts" v-tester/>
+            <show-more-btn :is-show="scope.row.showMore" :buttons="trashEnable ? trashButtons: buttons"
+                           :size="selectDataCounts"/>
           </template>
         </el-table-column>
         <template v-for="(item, index) in tableLabel">
-          <el-table-column v-if="item.id == 'num'" prop="num" label="ID"
+          <el-table-column v-if="item.id == 'num' && !customNum" prop="num" label="ID"
                            sortable="custom"
                            min-width="120px"
                            show-overflow-tooltip :key="index">
             <template slot-scope="scope">
-              <span style="cursor:pointer" v-if="isReadOnly"> {{ scope.row.num }} </span>
-              <el-tooltip v-else content="编辑">
+              <!--<span style="cursor:pointer" v-if="isReadOnly"> {{ scope.row.num }} </span>-->
+              <el-tooltip content="编辑">
                 <a style="cursor:pointer" @click="edit(scope.row)"> {{ scope.row.num }} </a>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="item.id == 'num' && customNum" prop="customNum" label="ID"
+                           sortable="custom"
+                           min-width="120px"
+                           show-overflow-tooltip :key="index">
+            <template slot-scope="scope">
+              <!--<span style="cursor:pointer" v-if="isReadOnly"> {{ scope.row.customNum }} </span>-->
+              <el-tooltip content="编辑">
+                <a style="cursor:pointer" @click="edit(scope.row)"> {{ scope.row.customNum }} </a>
               </el-tooltip>
             </template>
           </el-table-column>
@@ -44,14 +54,14 @@
                            sortable="custom"
                            :label="$t('api_test.automation.scenario_name')"
                            show-overflow-tooltip
-                           min-width="120px"
+                           min-width="150px"
                            :key="index"
           />
           <el-table-column v-if="item.id == 'level'" prop="level"
                            sortable="custom"
                            column-key="level"
-                           :filters="levelFilters"
-                           min-width="120px"
+                           :filters="LEVEL_FILTERS"
+                           min-width="130px"
                            :label="$t('api_test.automation.case_level')"
                            show-overflow-tooltip :key="index">
             <template v-slot:default="scope">
@@ -61,7 +71,7 @@
           <el-table-column v-if="item.id == 'status'" prop="status" :label="$t('test_track.plan.plan_status')"
                            sortable="custom"
                            column-key="status"
-                           :filters="statusFilters"
+                           :filters="STATUS_FILTERS"
                            show-overflow-tooltip min-width="120px" :key="index">
             <template v-slot:default="scope">
               <plan-status-table-item :value="scope.row.status"/>
@@ -70,14 +80,22 @@
           <el-table-column v-if="item.id == 'tags'" prop="tags" min-width="120px"
                            :label="$t('api_test.automation.tag')" :key="index">
             <template v-slot:default="scope">
-              <ms-tag v-for="(itemName,index)  in scope.row.tags" :key="index" type="success" effect="plain" :content="itemName" :show-tooltip="true"
+              <ms-tag v-for="(itemName,index)  in scope.row.tags" :key="index" type="success" effect="plain"
+                      :content="itemName" :show-tooltip="true"
                       tooltip style="margin-left: 0px; margin-right: 2px"/>
             </template>
           </el-table-column>
+          <el-table-column v-if="item.id == 'principal'" prop="principal" min-width="120px"
+                           :label="$t('api_test.definition.api_principal')"
+                           :filters="userFilters"
+                           column-key="principal"
+                           sortable="custom"
+                           show-overflow-tooltip
+                           :key="index"/>
           <el-table-column v-if="item.id == 'userId'" prop="userId" min-width="120px"
                            :label="$t('api_test.automation.creator')"
                            :filters="userFilters"
-                           column-key="user_id"
+                           column-key="userId"
                            sortable="custom"
                            show-overflow-tooltip
                            :key="index"/>
@@ -93,9 +111,9 @@
                            show-overflow-tooltip :key="index"/>
           <el-table-column v-if="item.id == 'lastResult'" prop="lastResult"
                            :label="$t('api_test.automation.last_result')"
-                           :filters="resultFilters"
+                           :filters="RESULT_FILTERS"
 
-                           sortable="custom" column-key="last_result" min-width="120px" :key="index">
+                           sortable="custom" column-key="last_result" min-width="130px" :key="index">
             <template v-slot:default="{row}">
               <el-link type="success" @click="showReport(row)" v-if="row.lastResult === 'Success'">
                 {{ $t('api_test.automation.success') }}
@@ -117,20 +135,24 @@
           <template v-slot:default="{row}">
             <div v-if="trashEnable">
               <ms-table-operator-button :tip="$t('commons.reduction')" icon="el-icon-refresh-left"
-                                        @exec="reductionApi(row)" v-tester/>
+                                        @exec="reductionApi(row)"/>
               <ms-table-operator-button :tip="$t('api_test.automation.remove')" icon="el-icon-delete"
-                                        @exec="remove(row)" type="danger" v-tester/>
+                                        @exec="remove(row)" type="danger"/>
             </div>
             <div v-else>
               <ms-table-operator-button :tip="$t('api_test.automation.edit')" icon="el-icon-edit" @exec="edit(row)"
-                                        v-tester/>
-              <ms-table-operator-button class="run-button" :is-tester-permission="true"
+                                        v-permission="['PROJECT_API_SCENARIO:READ+EDIT']"/>
+              <ms-table-operator-button class="run-button"
                                         :tip="$t('api_test.automation.execute')"
                                         icon="el-icon-video-play"
-                                        @exec="execute(row)" v-tester/>
+                                        v-permission="['PROJECT_API_SCENARIO:READ+RUN']"
+                                        @exec="execute(row)"/>
               <ms-table-operator-button :tip="$t('api_test.automation.copy')" icon="el-icon-document-copy" type=""
+                                        v-permission="['PROJECT_API_SCENARIO:READ+COPY']"
                                         @exec="copy(row)"/>
-              <ms-table-operator-button :tip="$t('api_test.automation.remove')" icon="el-icon-delete" @exec="remove(row)" type="danger" v-tester/>
+              <ms-table-operator-button :tip="$t('api_test.automation.remove')"
+                                        v-permission="['PROJECT_API_SCENARIO:READ+DELETE']"
+                                        icon="el-icon-delete" @exec="remove(row)" type="danger"/>
               <ms-scenario-extend-buttons style="display: contents" @openScenario="openScenario" :row="row"/>
             </div>
           </template>
@@ -148,16 +170,16 @@
         <!--测试计划-->
         <el-drawer :visible.sync="planVisible" :destroy-on-close="true" direction="ltr" :withHeader="false"
                    :title="$t('test_track.plan_view.test_result')" :modal="false" size="90%">
-          <ms-test-plan-list @addTestPlan="addTestPlan(arguments)" @cancel="cancel" ref="testPlanList" :row="selectRows"/>
+          <ms-test-plan-list @addTestPlan="addTestPlan(arguments)" @cancel="cancel" ref="testPlanList"
+                             :scenario-condition="condition" :row="selectRows"/>
         </el-drawer>
       </div>
     </el-card>
 
-    <batch-edit ref="batchEdit" @batchEdit="batchEdit" :typeArr="typeArr" :value-arr="valueArr" :dialog-title="$t('test_track.case.batch_edit_case')">
-    </batch-edit>
-
+    <batch-edit ref="batchEdit" @batchEdit="batchEdit" :typeArr="typeArr" :value-arr="valueArr"
+                :dialog-title="$t('test_track.case.batch_edit_case')"/>
     <batch-move @refresh="search" @moveSave="moveSave" ref="testBatchMove"/>
-
+    <ms-run-mode @handleRunBatch="handleRunBatch" ref="runMode"/>
   </div>
 </template>
 
@@ -180,11 +202,13 @@ import BatchEdit from "../../../track/case/components/BatchEdit";
 import {API_SCENARIO_LIST, PROJECT_NAME, WORKSPACE_ID} from "../../../../../common/js/constants";
 import EnvironmentSelect from "../../definition/components/environment/EnvironmentSelect";
 import BatchMove from "../../../track/case/components/BatchMove";
+import MsRunMode from "./common/RunMode";
+
 import {
   _filter,
   _handleSelect,
   _handleSelectAll,
-  _sort,
+  _sort, deepClone,
   getLabel,
   getSelectDataCounts,
   setUnSelectIds,
@@ -193,6 +217,7 @@ import {
 import {Api_Scenario_List} from "@/business/components/common/model/JsonData";
 import HeaderCustom from "@/business/components/common/head/HeaderCustom";
 import HeaderLabelOperate from "@/business/components/common/head/HeaderLabelOperate";
+import {API_SCENARIO_FILTERS} from "@/common/js/table-constants";
 
 export default {
   name: "MsApiScenarioList",
@@ -213,7 +238,8 @@ export default {
     MsApiReportDetail,
     MsScenarioExtendButtons,
     MsTestPlanList,
-    MsTableOperatorButton
+    MsTableOperatorButton,
+    MsRunMode
   },
   props: {
     referenced: {
@@ -232,19 +258,23 @@ export default {
     moduleTree: {
       type: Array,
       default() {
-        return []
+        return [];
       },
     },
     moduleOptions: {
       type: Array,
       default() {
-        return []
+        return [];
       },
     },
     //用于判断是否是只读用户
     isReadOnly: {
       type: Boolean,
       default: false,
+    },
+    customNum: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -253,7 +283,7 @@ export default {
       type: API_SCENARIO_LIST,
       headerItems: Api_Scenario_List,
       tableLabel: [],
-      screenHeight: document.documentElement.clientHeight - 280,//屏幕高度,
+      screenHeight: 'calc(100vh - 275px)',//屏幕高度,
       condition: {
         components: API_SCENARIO_CONFIGS
       },
@@ -278,22 +308,38 @@ export default {
       userFilters: [],
       buttons: [
         {
-          name: this.$t('api_test.automation.batch_add_plan'), handleClick: this.handleBatchAddCase
+          name: this.$t('api_test.automation.batch_add_plan'),
+          handleClick: this.handleBatchAddCase,
+          permissions: ['PROJECT_API_SCENARIO:READ+MOVE_BATCH']
         },
         {
-          name: this.$t('api_test.automation.batch_execute'), handleClick: this.handleBatchExecute
+          name: this.$t('api_test.automation.batch_execute'),
+          handleClick: this.handleBatchExecute,
+          permissions: ['PROJECT_API_SCENARIO:READ+RUN']
         },
         {
-          name: this.$t('test_track.case.batch_edit_case'), handleClick: this.handleBatchEdit
+          name: this.$t('test_track.case.batch_edit_case'),
+          handleClick: this.handleBatchEdit,
+          permissions: ['PROJECT_API_SCENARIO:READ+EDIT']
         },
         {
-          name: this.$t('test_track.case.batch_move_case'), handleClick: this.handleBatchMove
+          name: this.$t('test_track.case.batch_move_case'),
+          handleClick: this.handleBatchMove,
+          permissions: ['PROJECT_API_SCENARIO:READ+MOVE_BATCH']
         },
-        {name: this.$t('api_test.definition.request.batch_delete'), handleClick: this.handleDeleteBatch},
+        {
+          name: this.$t('api_test.definition.request.batch_delete'),
+          handleClick: this.handleDeleteBatch,
+          permissions: ['PROJECT_API_SCENARIO:READ+DELETE']
+        },
 
       ],
       trashButtons: [
-        {name: this.$t('api_test.definition.request.batch_delete'), handleClick: this.handleDeleteBatch},
+        {
+          name: this.$t('api_test.definition.request.batch_delete'),
+          handleClick: this.handleDeleteBatch,
+          permissions: ['PROJECT_API_SCENARIO:READ+DELETE']
+        },
         {
           name: "批量恢复", handleClick: this.handleBatchRestore
         },
@@ -301,28 +347,17 @@ export default {
       isSelectAllDate: false,
       selectRows: new Set(),
       selectDataCounts: 0,
+      ...API_SCENARIO_FILTERS,
       typeArr: [
         {id: 'level', name: this.$t('test_track.case.priority')},
         {id: 'status', name: this.$t('test_track.plan.plan_status')},
-        {id: 'principal', name: this.$t('api_test.definition.request.responsible'), optionMethod: this.getPrincipalOptions},
+        {
+          id: 'principal',
+          name: this.$t('api_test.definition.request.responsible'),
+          optionMethod: this.getPrincipalOptions
+        },
         // {id: 'environmentId', name: this.$t('api_test.definition.request.run_env'), optionMethod: this.getEnvsOptions},
         {id: 'projectEnv', name: this.$t('api_test.definition.request.run_env')},
-      ],
-      statusFilters: [
-        {text: this.$t('test_track.plan.plan_status_prepare'), value: 'Prepare'},
-        {text: this.$t('test_track.plan.plan_status_running'), value: 'Underway'},
-        {text: this.$t('test_track.plan.plan_status_completed'), value: 'Completed'},
-        {text: this.$t('test_track.plan.plan_status_trash'), value: 'Trash'},
-      ],
-      levelFilters: [
-        {text: 'P0', value: 'P0'},
-        {text: 'P1', value: 'P1'},
-        {text: 'P2', value: 'P2'},
-        {text: 'P3', value: 'P3'}
-      ],
-      resultFilters: [
-        {text: 'Fail', value: 'Fail'},
-        {text: 'Success', value: 'Success'}
       ],
       valueArr: {
         level: [
@@ -340,7 +375,7 @@ export default {
         environmentId: [],
         projectEnv: [],
       },
-    }
+    };
   },
   created() {
     this.condition.filters = {status: ["Prepare", "Underway", "Completed"]};
@@ -349,6 +384,7 @@ export default {
   },
   watch: {
     selectNodeIds() {
+      this.currentPage = 1;
       this.condition.selectAll = false;
       this.condition.unSelectIds = [];
       this.selectDataCounts = 0;
@@ -377,18 +413,20 @@ export default {
       return "Running" !== this.report.status;
     },
     projectId() {
-      return this.$store.state.projectId
+      return this.$store.state.projectId;
     },
   },
   methods: {
     customHeader() {
-      this.$refs.headerCustom.open(this.tableLabel)
+      const list = deepClone(this.tableLabel);
+      this.$refs.headerCustom.open(list);
     },
     selectByParam() {
       this.changeSelectDataRangeAll();
       this.search();
     },
     search(projectId) {
+      this.$emit('refreshTree');
       this.selectRows = new Set();
       this.condition.moduleIds = this.selectNodeIds;
       if (this.trashEnable) {
@@ -451,10 +489,11 @@ export default {
               setTimeout(this.$refs.scenarioTable.doLayout, 200);
             }
             this.checkTableRowIsSelect();
-          })
+          });
         });
       }
       getLabel(this, API_SCENARIO_LIST);
+
     },
     checkTableRowIsSelect() {
       //如果默认全选的话，则选中应该选中的行
@@ -476,7 +515,7 @@ export default {
               this.selectRows.delete(row);
             }
           }
-        })
+        });
       }
     },
     handleCommand(cmd) {
@@ -488,15 +527,28 @@ export default {
           break;
         case "all":
           this.condition.selectAll = true;
-          break
+          break;
       }
     },
     handleBatchAddCase() {
       this.planVisible = true;
     },
     handleBatchEdit() {
-      this.$refs.batchEdit.open(this.selectDataCounts);
       this.$refs.batchEdit.setScenarioSelectRows(this.selectRows, "scenario");
+      if (this.condition.selectAll) {
+        this.condition.ids = [];
+        let param = {};
+        this.buildBatchParam(param);
+        this.$post('/api/automation/listWithIds/all', param, response => {
+          let dataRows = response.data;
+          this.$refs.batchEdit.open(dataRows.size);
+          this.$refs.batchEdit.setAllDataRows(dataRows);
+          this.$refs.batchEdit.open(this.selectDataCounts);
+        });
+      } else {
+        this.$refs.batchEdit.setAllDataRows(new Set());
+        this.$refs.batchEdit.open(this.selectDataCounts);
+      }
     },
     handleBatchMove() {
       this.$refs.testBatchMove.open(this.moduleTree, [], this.moduleOptions);
@@ -520,7 +572,7 @@ export default {
         this.$post('/api/automation/batch/update/env', param, () => {
           this.$success(this.$t('commons.save_success'));
           this.search();
-        })
+        });
       } else {
         // 批量修改其它
         let param = {};
@@ -539,7 +591,7 @@ export default {
       this.$post('/user/ws/member/tester/list', {workspaceId: workspaceId}, response => {
         option.push(...response.data);
         this.userFilters = response.data.map(u => {
-          return {text: u.name, value: u.id}
+          return {text: u.name, value: u.id};
         });
       });
     },
@@ -550,8 +602,6 @@ export default {
           if (!(environment.config instanceof Object)) {
             environment.config = JSON.parse(environment.config);
           }
-          environment.name = environment.name + (environment.config.httpConfig.socket ?
-            (': ' + environment.config.httpConfig.protocol + '://' + environment.config.httpConfig.socket) : '');
         });
       });
     },
@@ -578,26 +628,8 @@ export default {
     },
     getReport() {
       if (this.batchReportId) {
-        let url = "/api/scenario/report/get/" + this.batchReportId;
-        this.$get(url, response => {
-          this.report = response.data || {};
-          if (response.data) {
-            if (this.isNotRunning) {
-              try {
-                this.content = JSON.parse(this.report.content);
-              } catch (e) {
-                throw e;
-              }
-              this.result.loading = false;
-              this.$success("批量执行成功，请到报告页面查看详情！");
-            } else {
-              setTimeout(this.getReport, 2000)
-            }
-          } else {
-            this.result.loading = false;
-            this.$error(this.$t('api_report.not_exist'));
-          }
-        });
+        this.result.loading = false;
+        this.$success("批量执行成功，请到报告页面查看详情！");
       }
     },
     buildBatchParam(param) {
@@ -606,11 +638,30 @@ export default {
       param.condition = this.condition;
     },
     handleBatchExecute() {
+      this.$refs.runMode.open();
+
+    },
+    orderBySelectRows(rows) {
+      let selectIds = Array.from(rows).map(row => row.id);
+      let array = [];
+      for (let i in this.tableData) {
+        if (selectIds.indexOf(this.tableData[i].id) !== -1) {
+          array.push(this.tableData[i].id);
+        }
+      }
+      return array;
+    },
+
+    handleRunBatch(config) {
       this.infoDb = false;
       let url = "/api/automation/run/batch";
-      let run = {};
+      let run = {config: config};
       run.id = getUUID();
-      this.buildBatchParam(run);
+      //按照列表排序
+      let ids = this.orderBySelectRows(this.selectRows);
+      run.ids = ids;
+      run.projectId = this.projectId;
+      run.condition = this.condition;
       this.$post(url, run, response => {
         let data = response.data;
         this.runVisible = false;
@@ -631,10 +682,19 @@ export default {
     },
 
     isSelectDataAll(data) {
+      // this.condition.selectAll = data;
+      // setUnSelectIds(this.tableData, this.condition, this.selectRows);
+      // this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
+      // toggleAllSelection(this.$refs.scenarioTable, this.tableData, this.selectRows);
       this.condition.selectAll = data;
-      setUnSelectIds(this.tableData, this.condition, this.selectRows);
-      this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
+      //设置勾选
       toggleAllSelection(this.$refs.scenarioTable, this.tableData, this.selectRows);
+      //显示隐藏菜单
+      _handleSelectAll(this, this.tableData, this.tableData, this.selectRows);
+      //设置未选择ID(更新)
+      this.condition.unSelectIds = [];
+      //更新统计信息
+      this.selectDataCounts = getSelectDataCounts(this.condition, this.total, this.selectRows);
     },
     edit(row) {
       let data = JSON.parse(JSON.stringify(row));
@@ -644,14 +704,14 @@ export default {
       this.$post("/api/automation/reduction", [row.id], response => {
         this.$success(this.$t('commons.save_success'));
         this.search();
-      })
+      });
     },
     handleBatchRestore() {
       let ids = Array.from(this.selectRows).map(row => row.id);
       this.$post("/api/automation/reduction", ids, response => {
         this.$success(this.$t('commons.save_success'));
         this.search();
-      })
+      });
     },
     handleDeleteBatch(row) {
       if (this.trashEnable) {
@@ -699,6 +759,7 @@ export default {
       let rowParam = JSON.parse(JSON.stringify(row));
       rowParam.copy = true;
       rowParam.name = 'copy_' + rowParam.name;
+      rowParam.customNum = '';
       this.$emit('edit', rowParam);
     },
     showReport(row) {
@@ -729,9 +790,7 @@ export default {
             // let ids = [row.id];
             let param = {};
             this.buildBatchParam(param);
-            if (param.ids && param.ids.length <= 0) {
-              param.ids = [row.id];
-            }
+            param.ids = [row.id];
             this.$post('/api/automation/removeToGcByBatch/', param, () => {
               // this.$post('/api/automation/removeToGc/', ids, () => {
               this.$success(this.$t('commons.delete_success'));
@@ -762,7 +821,7 @@ export default {
       column.realWidth = finalWidth;
     },
     openScenario(item) {
-      this.$emit('openScenario', item)
+      this.$emit('openScenario', item);
     },
     exportApi() {
       let param = {};
@@ -793,7 +852,7 @@ export default {
         if (obj && obj.length > 0) {
           obj.forEach(item => {
             downloadFile(item.name + ".jmx", item.jmx);
-          })
+          });
         }
       });
     },
@@ -806,8 +865,11 @@ export default {
         });
       });
     },
+    getConditions() {
+      return this.condition;
+    }
   }
-}
+};
 </script>
 
 <style scoped>

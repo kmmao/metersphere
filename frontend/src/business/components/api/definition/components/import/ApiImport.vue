@@ -194,15 +194,18 @@
         fileList: []
       }
     },
-    activated() {
-      this.selectedPlatform = this.platforms[0];
-    },
     created() {
       this.platforms.push(this.postmanPlanform);
       this.platforms.push(this.swaggerPlanform);
       this.platforms.push(this.harPlanform);
+      this.selectedPlatform = this.platforms[0];
     },
     watch: {
+      moduleOptions() {
+        if (this.moduleOptions.length > 0) {
+          this.formData.moduleId = this.moduleOptions[0].id;
+        }
+      },
       selectedPlatformValue() {
         for (let i in this.platforms) {
           if (this.platforms[i].value === this.selectedPlatformValue) {

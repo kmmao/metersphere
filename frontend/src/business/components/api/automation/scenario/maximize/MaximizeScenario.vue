@@ -2,9 +2,15 @@
   <div>
     <!-- 场景步骤-->
     <ms-container>
-      <ms-aside-container>
+      <ms-aside-container style="padding-top: 0px">
         <!-- 场景步骤内容 -->
         <div v-loading="loading">
+          <el-button class="el-icon-files ms-open-btn ms-open-btn-left" size="mini" @click="openExpansion">
+            {{$t('api_test.automation.open_expansion')}}
+          </el-button>
+          <el-button class="el-icon-notebook-1 ms-open-btn" size="mini" @click="closeExpansion">
+            {{$t('api_test.automation.close_expansion')}}
+          </el-button>
           <el-tree node-key="resourceId"
                    :props="props"
                    :data="scenarioDefinition"
@@ -138,7 +144,7 @@
   import {ELEMENT_TYPE, ELEMENTS} from "../Setting";
   import MsApiCustomize from "../ApiCustomize";
   import {getUUID, strMapToObj} from "@/common/js/utils";
-  import ApiEnvironmentConfig from "../../../definition/components/environment/ApiEnvironmentConfig";
+  import ApiEnvironmentConfig from "@/business/components/api/test/components/ApiEnvironmentConfig";
   import MsInputTag from "../MsInputTag";
   import MsRun from "../DebugRun";
   import MsApiReportDetail from "../../report/ApiReportDetail";
@@ -154,6 +160,7 @@
   import MsContainer from "../../../../common/components/MsContainer";
   import MsMainContainer from "../../../../common/components/MsMainContainer";
   import MsAsideContainer from "./MsLeftContainer";
+  import {saveScenario} from "@/business/components/api/automation/api-automation";
 
   let jsonPath = require('jsonpath');
   export default {
@@ -226,6 +233,7 @@
         projectEnvMap: new Map,
         projectList: [],
         debugResult: new Map,
+        expandedStatus: false,
       }
     },
     created() {
@@ -480,8 +488,10 @@
       },
       suggestClick(node) {
         this.response = {};
-        if (node.parent && node.parent.data.requestResult) {
+        if (node && node.parent && node.parent.data.requestResult) {
           this.response = node.parent.data.requestResult;
+        } else if (this.selectedNode) {
+          this.response = this.selectedNode.data.requestResult;
         }
       },
       showAll() {
@@ -808,43 +818,13 @@
           }
         });
       },
-      getBodyUploadFiles(obj) {
-        let bodyUploadFiles = [];
-        obj.bodyUploadIds = [];
-        this.scenarioDefinition.forEach(item => {
-          this.setFiles(item, bodyUploadFiles, obj);
-          if (item.hashTree != undefined && item.hashTree.length > 0) {
-            this.recursiveFile(item.hashTree, bodyUploadFiles, obj);
-          }
-        })
-        // 场景变量csv 文件
-        if (this.currentScenario.variables) {
-          this.currentScenario.variables.forEach(param => {
-            if (param.type === 'CSV' && param.files) {
-              param.files.forEach(item => {
-                if (item.file) {
-                  if (!item.id) {
-                    let fileId = getUUID().substring(0, 12);
-                    item.name = item.file.name;
-                    item.id = fileId;
-                  }
-                  obj.bodyUploadIds.push(item.id);
-                  bodyUploadFiles.push(item.file);
-                }
-              })
-            }
-          })
-        }
-        return bodyUploadFiles;
-      },
       editScenario() {
         return new Promise((resolve, reject) => {
           document.getElementById("inputDelay").focus();  //  保存前在input框自动失焦，以免保存失败
           this.$refs['currentScenario'].validate((valid) => {
             if (valid) {
               this.setParameter();
-              let bodyFiles = this.getBodyUploadFiles(this.currentScenario);
-              this.$fileUpload(this.path, null, bodyFiles, this.currentScenario, response => {
+              saveScenario(this.path, this.currentScenario, this.scenarioDefinition, (response) => {
                 this.$success(this.$t('commons.save_success'));
                 this.path = "/api/automation/update";
                 if (response.data) {
@@ -855,7 +835,7 @@
                 }
                 this.$emit('refresh', this.currentScenario);
                 resolve();
-              })
+              });
             }
           })
         });
@@ -940,6 +920,44 @@
         // 把执行结果分发给各个请求
         this.debugResult = result;
         this.sort()
+      },
+      shrinkTreeNode() {
+        //改变每个节点的状态
+        for (let i in this.scenarioDefinition) {
+          if (this.scenarioDefinition[i]) {
+            if (this.expandedStatus) {
+              this.expandedNode.push(this.scenarioDefinition[i].resourceId);
+            }
+            this.scenarioDefinition[i].active = this.expandedStatus;
+            if (this.scenarioDefinition[i].hashTree && this.scenarioDefinition[i].hashTree.length > 0) {
+              this.changeNodeStatus(this.scenarioDefinition[i].hashTree);
+            }
+          }
+        }
+      },
+      changeNodeStatus(nodes) {
+        for (let i in nodes) {
+          if (nodes[i]) {
+            if (this.expandedStatus) {
+              this.expandedNode.push(nodes[i].resourceId);
+            }
+            nodes[i].active = this.expandedStatus;
+            if (nodes[i].hashTree != undefined && nodes[i].hashTree.length > 0) {
+              this.changeNodeStatus(nodes[i].hashTree);
+            }
+          }
+        }
+      },
+      openExpansion() {
+        this.expandedNode = [];
+        this.expandedStatus = true;
+        this.shrinkTreeNode();
+      },
+      closeExpansion() {
+        this.expandedStatus = false;
+        this.expandedNode = [];
+        this.shrinkTreeNode();
+        this.reload();
       }
     }
   }
@@ -1110,5 +1128,16 @@
 
   .father:hover .child {
     display: block;
+  }
+
+  .ms-open-btn {
+    margin: 5px 5px 0px;
+    font-size: 10px;
+    background-color: #F2F9EE;
+    color: #67C23A;
+  }
+
+  .ms-open-btn-left {
+    margin-left: 30px;
   }
 </style>

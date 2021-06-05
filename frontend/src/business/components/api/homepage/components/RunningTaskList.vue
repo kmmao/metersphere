@@ -57,7 +57,6 @@
 </template>
 
 <script>
-import {checkoutTestManagerOrTestUser} from "@/common/js/utils";
 import MsTag from "@/business/components/common/components/MsTag";
 export default {
   name: "MsRunningTaskList",
@@ -79,7 +78,7 @@ export default {
 
   computed:{
     isReadOnly(){
-      return !checkoutTestManagerOrTestUser();
+      return false;
     },
     projectId() {
       return this.$store.state.projectId
@@ -117,8 +116,10 @@ export default {
     redirect(param){
       if(param.taskGroup === 'TEST_PLAN_TEST'){
         this.$emit('redirectPage','testPlanEdit','', param.scenarioId);
-      }else if(param.taskGroup === 'API_SCENARIO_TEST') {
-        this.$emit('redirectPage','scenario','scenario', 'edit:'+param.scenarioId);
+      }else if (param.taskGroup === 'API_SCENARIO_TEST') {
+        this.$emit('redirectPage', 'scenario', 'scenario', 'edit:' + param.scenarioId);
+      } else if (param.taskGroup === 'SWAGGER_IMPORT') {
+        this.$emit('redirectPage', 'api', 'api', 'edit:' + param.scenarioId);
       }
     }
   },

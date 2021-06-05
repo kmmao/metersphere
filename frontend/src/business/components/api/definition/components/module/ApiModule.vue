@@ -7,16 +7,21 @@
       v-loading="result.loading"
       :tree-nodes="data"
       :type="isReadOnly ? 'view' : 'edit'"
+      :allLabel="$t('commons.all_module_title')"
       @add="add"
       @edit="edit"
       @drag="drag"
       @remove="remove"
       @refresh="list"
+      :delete-permission="['PROJECT_API_DEFINITION:READ+DELETE_API']"
+      :add-permission="['PROJECT_API_DEFINITION:READ+CREATE_API']"
+      :update-permission="['PROJECT_API_DEFINITION:READ+EDIT_API']"
       @nodeSelectEvent="nodeChange"
       ref="nodeTree">
 
       <template v-slot:header>
         <api-module-header
+          :show-operator="showOperator"
           :condition="condition"
           :current-module="currentModule"
           :is-read-only="isReadOnly"
@@ -71,6 +76,7 @@
           return false
         }
       },
+      showOperator: Boolean,
       planId: String,
       relevanceProjectId: String,
       reviewId: String
@@ -90,9 +96,9 @@
       },
     },
     mounted() {
-      this.$emit('protocolChange', this.condition.protocol);
-      this.list();
+      this.initProtocol();
     },
+
     watch: {
       'condition.filterText'(val) {
         this.$refs.nodeTree.filter(val);
@@ -115,6 +121,13 @@
       }
     },
     methods: {
+      initProtocol() {
+        this.$get('/api/module/getUserDefaultApiType/', response => {
+          this.condition.protocol = response.data;
+          this.$emit('protocolChange', this.condition.protocol);
+          this.list();
+        });
+      },
       list(projectId) {
         let url = undefined;
         if (this.isPlanModel) {

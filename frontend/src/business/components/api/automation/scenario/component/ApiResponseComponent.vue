@@ -35,29 +35,33 @@
       if (!this.result) {
         this.getExecResult();
         if (this.apiItem.isActive) {
-          this.isActive = true;
+         // this.isActive = true;
         }
       } else {
         this.response = this.result;
-        this.isActive = true;
+        // this.isActive = true;
       }
     },
     watch: {
       result() {
         this.response = this.result;
         this.isActive = true;
+      },
+      apiItem(){
+        this.getExecResult();
       }
     },
     methods: {
       getExecResult() {
         // 执行结果信息
-        if (this.apiItem) {
+        if (this.apiItem && this.apiItem.id) {
           let url = "/api/definition/report/getReport/" + this.apiItem.id;
           this.$get(url, response => {
             if (response.data) {
               let data = JSON.parse(response.data.content);
               this.response = data;
               this.$set(this.apiItem, 'responseData', data);
+              this.isActive = true;
             }
           });
         }

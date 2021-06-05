@@ -6,7 +6,11 @@
     <ms-node-tree
       v-loading="result.loading"
       :tree-nodes="data"
+      :allLabel="$t('commons.all_module_title')"
       :type="isReadOnly ? 'view' : 'edit'"
+      :delete-permission="['PROJECT_API_SCENARIO:READ+DELETE']"
+      :add-permission="['PROJECT_API_SCENARIO:READ+CREATE']"
+      :update-permission="['PROJECT_API_SCENARIO:READ+EDIT']"
       @add="add"
       @edit="edit"
       @drag="drag"
@@ -17,6 +21,7 @@
 
       <template v-slot:header>
         <ms-search-bar
+          :show-operator="showOperator"
           :condition="condition"
           :commands="operators"/>
         <module-trash-button v-if="!isReadOnly" :condition="condition" :exe="enableTrash"/>
@@ -60,6 +65,7 @@
           return false
         }
       },
+      showOperator: Boolean,
       relevanceProjectId: String,
       planId: String
     },
@@ -86,14 +92,17 @@
         operators: [
           {
             label: this.$t('api_test.automation.add_scenario'),
-            callback: this.addScenario
+            callback: this.addScenario,
+            permissions: ['PROJECT_API_SCENARIO:READ+CREATE']
           },
           {
             label: this.$t('api_test.api_import.label'),
-            callback: this.handleImport
+            callback: this.handleImport,
+            permissions: ['PROJECT_API_SCENARIO:READ+IMPORT_SCENARIO']
           },
           {
             label: this.$t('report.export'),
+            permissions: ['PROJECT_API_SCENARIO:READ+EXPORT_SCENARIO'],
             children: [
               {
                 label: this.$t('report.export_to_ms_format'),
@@ -262,6 +271,7 @@
       },
       enableTrash() {
         this.condition.trashEnable = true;
+        this.$emit('enableTrash', this.condition.trashEnable);
       }
     }
   }

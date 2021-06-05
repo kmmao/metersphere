@@ -19,7 +19,7 @@
       <el-checkbox v-model="cookieShare" @change="setCookieShare" style="margin-right: 20px">共享cookie</el-checkbox>
 
       <env-popover :disabled="scenarioDefinition.length < 1" :isReadOnly="scenarioDefinition.length < 1" :env-map="envMap" :project-ids="projectIds" @setProjectEnvMap="setProjectEnvMap"
-                   @showPopover="showPopover" :project-list="projectList" ref="envPopover" class="ms-right"/>
+                   @showPopover="showPopover" :project-list="projectList" ref="envPopover" class="ms-right" :result="envResult"/>
 
       <el-button :disabled="scenarioDefinition.length < 1" size="mini" type="primary" v-prevent-re-click @click="runDebug">{{$t('api_test.request.debug')}}</el-button>
 
@@ -30,7 +30,7 @@
 </template>
 
 <script>
-  import {checkoutTestManagerOrTestUser, exportPdf} from "@/common/js/utils";
+  import {exportPdf} from "@/common/js/utils";
   import html2canvas from 'html2canvas';
   import EnvPopover from "../../scenario/EnvPopover";
 
@@ -49,6 +49,14 @@
         loading: false,
         varSize: 0,
         cookieShare: false,
+        envResult: {
+          loading: false
+        }
+      }
+    },
+    computed: {
+      projectId() {
+        return this.$store.state.projectId
       }
     },
     mounted() {
@@ -111,14 +119,17 @@
       showPopover() {
         let definition = JSON.parse(JSON.stringify(this.currentScenario));
         definition.hashTree = this.scenarioDefinition;
+        this.envResult.loading = true;
         this.getEnv(JSON.stringify(definition)).then(() => {
           this.$refs.envPopover.openEnvSelect();
+          this.envResult.loading = false;
         })
       },
       getEnv(definition) {
         return new Promise((resolve) => {
           this.$post("/api/automation/getApiScenarioEnv", {definition: definition}, res => {
             if (res.data) {
+              res.data.projectIds.push(this.projectId);
               this.$emit("update:projectIds", new Set(res.data.projectIds));
               this.$emit("update:isFullUrl", res.data.fullUrl);
             }

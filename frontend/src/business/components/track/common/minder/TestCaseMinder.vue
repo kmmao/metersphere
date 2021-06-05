@@ -4,8 +4,12 @@
     :tree-nodes="treeNodes"
     :data-map="dataMap"
     :tags="tags"
+    minder-key="testCase"
     :select-node="selectNode"
     :distinct-tags="tags"
+    :tag-edit-check="tagEditCheck()"
+    :priority-disable-check="priorityDisableCheck()"
+    :disabled="disabled"
     @save="save"
     ref="minder"
   />
@@ -16,9 +20,9 @@ import MsModuleMinder from "@/business/components/common/components/MsModuleMind
 import {
   appendChild,
   getTestCaseDataMap,
-  parseCase, updateNode
+  parseCase, priorityDisableCheck, tagEditCheck, updateNode
 } from "@/business/components/track/common/minder/minderUtils";
-import {getNodePath} from "@/common/js/utils";
+import {getNodePath, hasPermission} from "@/common/js/utils";
 export default {
 name: "TestCaseMinder",
   components: {MsModuleMinder},
@@ -38,7 +42,7 @@ name: "TestCaseMinder",
       }
     },
     condition: Object,
-    projectId: String
+    projectId: String,
   },
   computed: {
     selectNodeIds() {
@@ -49,6 +53,9 @@ name: "TestCaseMinder",
     },
     moduleOptions() {
       return this.$store.state.testCaseModuleOptions;
+    },
+    disabled() {
+      return !hasPermission('PROJECT_TRACK_CASE:READ+EDIT');
     }
   },
   watch: {
@@ -73,11 +80,11 @@ name: "TestCaseMinder",
   methods: {
     getTestCases() {
       if (this.projectId) {
-        let param = {
-          projectId: this.projectId,
-          nodeIds: this.selectNodeIds
-        }
-        this.result = this.$post('/test/case/list/minder', param,response => {
+        // let param = {
+        //   projectId: this.projectId,
+        //   nodeIds: this.selectNodeIds
+        // }
+        this.result = this.$post('/test/case/list/minder', this.condition,response => {
           this.testCase = response.data;
           this.dataMap = getTestCaseDataMap(this.testCase);
         });
@@ -94,6 +101,7 @@ name: "TestCaseMinder",
       }
       this.result = this.$post('/test/case/minder/edit', param, () => {
         this.$success(this.$t('commons.save_success'));
+        this.getTestCases();
       });
     },
     buildSaveCase(root, saveCases, deleteCases, parent) {
@@ -152,6 +160,11 @@ name: "TestCaseMinder",
               step.result = result;
             }
             steps.push(step);
+
+            if (data.stepModel === 'TEXT') {
+              testCase.stepDescription = step.desc;
+              testCase.expectedResult = step.result;
+            }
           }
           if (childData.changed) isChange = true;
         })
@@ -165,6 +178,12 @@ name: "TestCaseMinder",
         this.$error(tip)
         throw new Error(tip);
       }
+    },
+    tagEditCheck() {
+      return tagEditCheck;
+    },
+    priorityDisableCheck() {
+      return priorityDisableCheck;
     },
     addCase(data, type) {
       let nodeData = parseCase(data, new Map());
